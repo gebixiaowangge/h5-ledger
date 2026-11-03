@@ -452,11 +452,21 @@ function renderStats(){
   drawPie(entries);
   drawBar();
 }
+// 统一处理 retina 缩放：位图 = 显示高 ×2，绘制坐标在逻辑空间 (0..W, 0..H)
+function setupCanvas(cv,H){
+  const W=cv.clientWidth||320;
+  cv.style.height=H+'px';
+  cv.width=W*2; cv.height=H*2;
+  const ctx=cv.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(2,2);
+  ctx.clearRect(0,0,W,H);
+  return {ctx,W,H};
+}
 function drawPie(entries){
-  const cv=document.getElementById('pie');const W=cv.clientWidth||320;cv.width=W*2;cv.height=440;const ctx=cv.getContext('2d');ctx.scale(2,2);
-  ctx.clearRect(0,0,W,440);
+  const {ctx,W,H}=setupCanvas(document.getElementById('pie'),240);
   const total=entries.reduce((s,e)=>s+e.val,0);
-  const cx=W/2,cy=150,r=80,r2=52;
+  const cx=W/2,cy=120,r=78,r2=50;
   if(!total){ctx.fillStyle='#8a9099';ctx.font='14px sans-serif';ctx.textAlign='center';ctx.fillText('本月暂无支出',cx,cy);}
   else{
     let a=-Math.PI/2;
@@ -469,12 +479,12 @@ function drawPie(entries){
   leg.innerHTML=entries.length?entries.map(e=>`<div class="li"><span class="dot" style="background:${e.color}"></span>${e.name} ¥${fmtShort(e.val)}</div>`).join(''):'<div class="li">暂无数据</div>';
 }
 function drawBar(){
-  const cv=document.getElementById('bar');const W=cv.clientWidth||320;cv.width=W*2;cv.height=400;const ctx=cv.getContext('2d');ctx.scale(2,2);ctx.clearRect(0,0,W,400);
+  const {ctx,W,H}=setupCanvas(document.getElementById('bar'),250);
   const months=[];let [y,m]=curStatsMonth.split('-').map(Number);
   for(let i=5;i>=0;i--){let mm=m-i;let yy=y;if(mm<1){mm+=12;yy--;}months.push(yy+'-'+String(mm).padStart(2,'0'));}
   const data=months.map(mo=>{const rs=getRecords().filter(r=>r.date.slice(0,7)===mo);let inc=0,exp=0;rs.forEach(r=>r.type==='income'?inc+=r.amount:exp+=r.amount);return{mo,inc,exp};});
   const max=Math.max(1,...data.map(d=>Math.max(d.inc,d.exp)));
-  const padL=8,padR=8,baseY=350,topY=30,gap=14;
+  const padL=10,padR=10,baseY=205,topY=24,gap=12;
   const bw=(W-padL-padR-gap*(months.length-1))/2/months.length;
   const palette=['#1bbf73','#ff5a5f'];
   data.forEach((d,i)=>{
@@ -485,12 +495,12 @@ function drawBar(){
       ctx.fillRect(x0+j*bw,baseY-h,bw-3,h);
     });
     ctx.fillStyle='#8a9099';ctx.font='10px sans-serif';ctx.textAlign='center';
-    ctx.fillText(d.mo.slice(2),x0+bw-1.5,baseY+14);
+    ctx.fillText(d.mo.slice(2),x0+bw-1.5,baseY+16);
   });
   // legend
   ctx.textAlign='left';ctx.font='11px sans-serif';
-  ctx.fillStyle='#1bbf73';ctx.fillRect(padL,baseY+26,10,10);ctx.fillStyle='#8a9099';ctx.fillText('收入',padL+14,baseY+35);
-  ctx.fillStyle='#ff5a5f';ctx.fillRect(padL+60,baseY+26,10,10);ctx.fillStyle='#8a9099';ctx.fillText('支出',padL+74,baseY+35);
+  ctx.fillStyle='#1bbf73';ctx.fillRect(padL,baseY+28,10,10);ctx.fillStyle='#8a9099';ctx.fillText('收入',padL+14,baseY+37);
+  ctx.fillStyle='#ff5a5f';ctx.fillRect(padL+60,baseY+28,10,10);ctx.fillStyle='#8a9099';ctx.fillText('支出',padL+74,baseY+37);
 }
 
 /* ---------- 分类管理 ---------- */
