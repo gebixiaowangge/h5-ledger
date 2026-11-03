@@ -207,6 +207,11 @@
     <canvas id="bar" height="200"></canvas>
     <div class="chart-sum" id="bar-sum"></div>
   </div>
+  <div class="chart-card">
+    <h3>近 6 个月盈余</h3>
+    <canvas id="bar-surplus" height="200"></canvas>
+    <div class="chart-sum" id="surplus-sum"></div>
+  </div>
 </div>
 
 <!-- 我的 -->
@@ -423,7 +428,12 @@ function renderBills(){
   // 按日分组
   const groups={};recs.forEach(r=>{(groups[r.date]=groups[r.date]||[]).push(r);});
   let html='';let exp=0,inc=0;recs.forEach(r=>r.type==='income'?inc+=r.amount:exp+=r.amount);
-  html+=`<div class="month-pick" style="margin-top:0"><div><div style="font-size:12px;color:var(--sub)">收</div><div style="color:var(--income);font-weight:700">¥${fmtShort(inc)}</div></div><div style="text-align:right"><div style="font-size:12px;color:var(--sub)">支</div><div style="color:var(--expense);font-weight:700">¥${fmtShort(exp)}</div></div></div>`;
+  const surplus=inc-exp;
+  html+=`<div class="month-pick" style="margin-top:0;justify-content:space-around">
+    <div style="text-align:center"><div style="font-size:12px;color:var(--sub)">收入</div><div style="color:var(--income);font-weight:700">¥${fmtShort(inc)}</div></div>
+    <div style="text-align:center"><div style="font-size:12px;color:var(--sub)">支出</div><div style="color:var(--expense);font-weight:700">¥${fmtShort(exp)}</div></div>
+    <div style="text-align:center"><div style="font-size:12px;color:var(--sub)">盈余</div><div style="color:${surplus>=0?'var(--income)':'var(--expense)'};font-weight:700">¥${fmtShort(surplus)}</div></div>
+  </div>`;
   Object.keys(groups).sort().reverse().forEach(d=>{
     const list=groups[d];let de=0,di=0;list.forEach(r=>r.type==='income'?di+=r.amount:de+=r.amount);
     html+=`<div class="day-group"><div class="day-head"><span>${d} ${'日一二三四五六'[new Date(d).getDay()]}</span><span>支 ¥${fmtShort(de)} · 收 ¥${fmtShort(di)}</span></div>`;
@@ -454,6 +464,7 @@ function renderStats(){
   const entries=Object.keys(byCat).map(k=>{const c=getCat(k)||{name:k,color:'#ccc'};return{name:c.name,val:byCat[k],color:c.color};}).sort((a,b)=>b.val-a.val);
   drawPie(entries);
   drawBar();
+  drawSurplus();
 }
 // 统一处理 retina 缩放：位图 = 显示高 ×2，绘制坐标在逻辑空间 (0..W, 0..H)
 function setupCanvas(cv,H){
@@ -507,6 +518,35 @@ function drawBar(){
   // 小结
   const totInc=data.reduce((s,d)=>s+d.inc,0), totExp=data.reduce((s,d)=>s+d.exp,0);
   document.getElementById('bar-sum').textContent='近 6 个月  收入 ¥'+fmtShort(totInc)+' · 支出 ¥'+fmtShort(totExp);
+}
+function drawSurplus(){
+  const {ctx,W,H}=setupCanvas(document.getElementById('bar-surplus'),250);
+  const months=[];let [y,m]=curStatsMonth.split('-').map(Number);
+  for(let i=5;i>=0;i--){let mm=m-i;let yy=y;if(mm<1){mm+=12;yy--;}months.push(yy+'-'+String(mm).padStart(2,'0'));}
+  const data=months.map(mo=>{const rs=getRecords().filter(r=>r.date.slice(0,7)===mo);let inc=0,exp=0;rs.forEach(r=>r.type==='income'?inc+=r.amount:exp+=r.amount);return{mo,val:inc-exp};});
+  const padL=14,padR=14,topY=16,bottomY=H-46,midY=(topY+bottomY)/2;
+  const maxAbs=Math.max(1,...data.map(d=>Math.abs(d.val)));
+  const n=data.length;
+  const bw=(W-padL-padR-12*(n-1))/n;
+  data.forEach((d,i)=>{
+    const x=padL+i*(bw+12);
+    const h=Math.abs(d.val)/maxAbs*(midY-topY);
+    if(d.val>=0){
+      ctx.fillStyle='#1bbf73';ctx.fillRect(x,midY-h,bw,h);
+      ctx.fillStyle='#1bbf73';ctx.font='10px sans-serif';ctx.textAlign='center';
+      ctx.fillText('¥'+fmtShort(d.val),x+bw/2,Math.max(topY+9,midY-h-4));
+    }else{
+      ctx.fillStyle='#ff5a5f';ctx.fillRect(x,midY,bw,h);
+      ctx.fillStyle='#ff5a5f';ctx.font='10px sans-serif';ctx.textAlign='center';
+      ctx.fillText('¥'+fmtShort(d.val),x+bw/2,Math.min(bottomY-4,midY+h+12));
+    }
+    ctx.fillStyle='#8a9099';ctx.font='10px sans-serif';ctx.textAlign='center';
+    ctx.fillText(d.mo.slice(2),x+bw/2,bottomY+14);
+  });
+  // 零基线
+  ctx.strokeStyle='#e2e5ea';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(padL,midY);ctx.lineTo(W-padR,midY);ctx.stroke();
+  const tot=data.reduce((s,d)=>s+d.val,0);
+  document.getElementById('surplus-sum').textContent='近 6 个月  盈余 ¥'+fmtShort(tot);
 }
 
 /* ---------- 分类管理 ---------- */
