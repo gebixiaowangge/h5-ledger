@@ -135,6 +135,7 @@
   .chart-card{background:var(--card);border-radius:16px;padding:14px;box-shadow:var(--shadow);margin-bottom:14px;}
   .chart-card h3{margin:0 0 10px;font-size:15px;}
   canvas{width:100%;display:block;}
+  .chart-sum{font-size:12px;color:var(--sub);text-align:center;margin-top:6px;}
   .legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:10px;}
   .legend .li{display:flex;align-items:center;font-size:12px;color:var(--sub);}
   .legend .dot{width:9px;height:9px;border-radius:3px;margin-right:5px;}
@@ -204,6 +205,7 @@
   <div class="chart-card">
     <h3>近 6 个月收支</h3>
     <canvas id="bar" height="200"></canvas>
+    <div class="chart-sum" id="bar-sum"></div>
   </div>
 </div>
 
@@ -501,6 +503,9 @@ function drawBar(){
   ctx.textAlign='left';ctx.font='11px sans-serif';
   ctx.fillStyle='#1bbf73';ctx.fillRect(padL,baseY+28,10,10);ctx.fillStyle='#8a9099';ctx.fillText('收入',padL+14,baseY+37);
   ctx.fillStyle='#ff5a5f';ctx.fillRect(padL+60,baseY+28,10,10);ctx.fillStyle='#8a9099';ctx.fillText('支出',padL+74,baseY+37);
+  // 小结
+  const totInc=data.reduce((s,d)=>s+d.inc,0), totExp=data.reduce((s,d)=>s+d.exp,0);
+  document.getElementById('bar-sum').textContent='近 6 个月  收入 ¥'+fmtShort(totInc)+' · 支出 ¥'+fmtShort(totExp);
 }
 
 /* ---------- 分类管理 ---------- */
