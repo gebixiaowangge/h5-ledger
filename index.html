@@ -57,10 +57,10 @@
   .rec .amt.income{color:var(--income);}
   .rec .amt.expense{color:var(--expense);}
 
-  /* add FAB */
+  /* add FAB — center of bottom nav, protruding up */
   .fab{
     position:fixed;left:50%;transform:translateX(-50%);
-    bottom:calc(76px + env(safe-area-inset-bottom));
+    bottom:calc(30px + env(safe-area-inset-bottom));
     width:56px;height:56px;border-radius:50%;
     background:linear-gradient(135deg,var(--brand),var(--brand2));
     color:#fff;font-size:30px;
@@ -76,6 +76,7 @@
     display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:20;
   }
   .tab{flex:1;text-align:center;padding:8px 0;color:var(--sub);font-size:11px;}
+  .tab-spacer{flex:1;}
   .tab .ti{font-size:20px;line-height:1.2;}
   .tab .nav-svg{width:22px;height:22px;display:block;margin:0 auto 2px;}
   .fab svg{width:26px;height:26px;display:block;}
@@ -225,6 +226,7 @@
 <div class="tabbar">
   <div class="tab active" onclick="goTab('home')"><div class="ti"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.6V20h14V9.6"/><path d="M9.5 20v-6h5v6"/></svg></div>首页</div>
   <div class="tab" onclick="goTab('bills')"><div class="ti"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12"/><path d="M8 12h12"/><path d="M8 18h12"/><circle cx="4" cy="6" r="1.1"/><circle cx="4" cy="12" r="1.1"/><circle cx="4" cy="18" r="1.1"/></svg></div>明细</div>
+  <div class="tab-spacer"></div>
   <div class="tab" onclick="goTab('stats')"><div class="ti"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V12"/><path d="M12 20V4"/><path d="M19 20V9"/><path d="M3 20h18"/></svg></div>统计</div>
   <div class="tab" onclick="goTab('mine')"><div class="ti"><svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg></div>我的</div>
 </div>
