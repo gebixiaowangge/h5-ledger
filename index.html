@@ -115,6 +115,9 @@
   .field .val{flex:1;color:var(--text);}
   .field input{border:none;background:transparent;outline:none;flex:1;font-size:14px;color:var(--text);}
   .field .arrow{color:var(--sub);}
+  .field.col{flex-direction:column;align-items:stretch;}
+  .field.col .k{width:auto;margin-bottom:8px;}
+  .field .chips{display:flex;flex-wrap:wrap;gap:8px;}
 
   .btn{width:100%;border:none;border-radius:14px;padding:14px;font-size:16px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--brand),var(--brand2));box-shadow:0 6px 16px rgba(255,122,61,.35);}
   .btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--line);box-shadow:none;}
@@ -238,8 +241,8 @@
     <input id="amt" type="number" inputmode="decimal" placeholder="0.00" oninput="onAmtInput()" />
   </div>
   <div class="grid" id="cat-grid"></div>
-  <div class="field" onclick="pickDate()"><span class="k">日期</span><span class="val" id="add-date">今天</span><span class="arrow">›</span></div>
-  <div class="field" onclick="pickAccount()"><span class="k">账户</span><span class="val" id="add-account">现金</span><span class="arrow">›</span></div>
+  <div class="field"><span class="k">日期</span><input id="add-date" type="date" class="val" /></div>
+  <div class="field col"><span class="k">账户</span><div class="chips" id="account-chips"></div></div>
   <div class="field"><span class="k">备注</span><input id="add-note" placeholder="选填，如：午饭" /></div>
   <button class="btn" onclick="saveRecord()">保存</button>
   <button class="btn ghost" style="margin-top:10px" onclick="closeAdd()">取消</button>
@@ -350,8 +353,8 @@ function openAdd(rec){
     openAdd._edit=rec;
   }else{openAdd._edit=null;document.getElementById('amt').value='';document.getElementById('add-note').value='';}
   setType(addState.type);
-  document.getElementById('add-date').textContent=addState.date===todayStr()?'今天':addState.date;
-  document.getElementById('add-account').textContent=addState.account;
+  document.getElementById('add-date').value=addState.date;
+  renderAccountChips();
   renderCatGrid();
   document.getElementById('mask').classList.add('show');
   document.getElementById('sheet').classList.add('show');
@@ -368,14 +371,11 @@ function renderCatGrid(){
     </div>`).join('');
 }
 function chooseCat(id){addState.catId=id;renderCatGrid();}
-function pickDate(){
-  const v=prompt('输入日期 (YYYY-MM-DD)：',addState.date);
-  if(v&&/^\d{4}-\d{2}-\d{2}$/.test(v)){addState.date=v;document.getElementById('add-date').textContent=v===todayStr()?'今天':v;}
+function renderAccountChips(){
+  const box=document.getElementById('account-chips');
+  box.innerHTML=ACCOUNTS.map(a=>`<div class="chip ${a===addState.account?'on':''}" onclick="chooseAccount('${a}')">${a}</div>`).join('');
 }
-function pickAccount(){
-  const i=prompt('选择账户 (输入序号)：\n'+ACCOUNTS.map((a,k)=>(k+1)+'. '+a).join('\n'),(ACCOUNTS.indexOf(addState.account)+1));
-  if(i&&ACCOUNTS[+i-1]){addState.account=ACCOUNTS[+i-1];document.getElementById('add-account').textContent=addState.account;}
-}
+function chooseAccount(a){addState.account=a;renderAccountChips();}
 function saveRecord(){
   const amt=parseFloat(document.getElementById('amt').value);
   if(!amt||amt<=0){toast('请输入金额');return;}
