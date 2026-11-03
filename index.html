@@ -64,8 +64,9 @@
     bottom:calc(76px + env(safe-area-inset-bottom));
     width:56px;height:56px;border-radius:50%;
     background:linear-gradient(135deg,var(--brand),var(--brand2));
-    color:#fff;font-size:30px;line-height:56px;text-align:center;
+    color:#fff;font-size:30px;
     box-shadow:0 8px 22px rgba(255,122,61,.45);z-index:30;
+    display:flex;align-items:center;justify-content:center;
   }
 
   /* tab bar */
@@ -78,7 +79,7 @@
   .tab{flex:1;text-align:center;padding:8px 0;color:var(--sub);font-size:11px;}
   .tab .ti{font-size:20px;line-height:1.2;}
   .tab .nav-svg{width:22px;height:22px;display:block;margin:0 auto 2px;}
-  .fab svg{width:26px;height:26px;display:block;margin:0 auto;}
+  .fab svg{width:26px;height:26px;display:block;}
   .ico svg{width:20px;height:20px;display:block;}
   .tab.active{color:var(--brand);font-weight:600;}
 
