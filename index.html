@@ -244,7 +244,7 @@
     <input id="amt" type="number" inputmode="decimal" placeholder="0.00" oninput="onAmtInput()" />
   </div>
   <div class="grid" id="cat-grid"></div>
-  <div class="field"><span class="k">日期</span><input id="add-date" type="date" class="val" /></div>
+  <div class="field"><span class="k">消费日期</span><input id="add-date" type="date" class="val" onchange="addState.date=this.value" oninput="addState.date=this.value" /></div>
   <div class="field col"><span class="k">账户</span><div class="chips" id="account-chips"></div></div>
   <div class="field"><span class="k">备注</span><input id="add-note" placeholder="选填，如：午饭" /></div>
   <button class="btn" onclick="saveRecord()">保存</button>
