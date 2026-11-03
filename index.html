@@ -56,6 +56,9 @@
   .rec .amt{font-size:16px;font-weight:700;white-space:nowrap;}
   .rec .amt.income{color:var(--income);}
   .rec .amt.expense{color:var(--expense);}
+  .rec.who-male{border-left:4px solid #3b82f6;}
+  .rec.who-female{border-left:4px solid #ff6b9d;}
+  .rec .note .who-mini{margin-right:4px;}
 
   /* add FAB — center of bottom nav, protruding up */
   .fab{
@@ -251,6 +254,7 @@
   <div class="grid" id="cat-grid"></div>
   <div class="field"><span class="k">消费日期</span><input id="add-date" type="date" class="val" onchange="addState.date=this.value" oninput="addState.date=this.value" /></div>
   <div class="field col"><span class="k">账户</span><div class="chips" id="account-chips"></div></div>
+  <div class="field col"><span class="k">消费人</span><div class="chips" id="who-chips"></div></div>
   <div class="field"><span class="k">备注</span><input id="add-note" placeholder="选填，如：午饭" /></div>
   <button class="btn" onclick="saveRecord()">保存</button>
   <button class="btn ghost" style="margin-top:10px" onclick="closeAdd()">取消</button>
@@ -291,6 +295,23 @@ const DEFAULT_CATS = [
 ];
 const ACCOUNTS = ['现金','银行卡','微信','支付宝','其他'];
 
+// 消费人：男(蓝) / 女(粉)，含可爱头像 SVG
+const WHO = {
+  male:{label:'男',color:'#3b82f6'},
+  female:{label:'女',color:'#ff6b9d'}
+};
+function whoAvatar(who,size){
+  const w=WHO[who];
+  const svg = w
+    ? `<svg viewBox="0 0 48 48" width="100%" height="100%"><circle cx="24" cy="24" r="24" fill="${w.color}"/>`+
+      (who==='female'
+        ? `<path d="M16 10 L24 14 L32 10 L29 17 L19 17 Z" fill="#fff"/><circle cx="24" cy="20" r="7" fill="#fff"/><path d="M11 40c0-7.5 5.8-13 13-13s13 5.5 13 13z" fill="#fff"/>`
+        : `<circle cx="24" cy="19" r="7" fill="#fff"/><path d="M11 39c0-7 5.8-12 13-12s13 5 13 12z" fill="#fff"/>`)+
+      `</svg>`
+    : `<svg viewBox="0 0 48 48" width="100%" height="100%"><circle cx="24" cy="24" r="24" fill="#e6e8eb"/><circle cx="24" cy="24" r="9" fill="#fff"/></svg>`;
+  return `<span class="who-mini" style="display:inline-block;width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;vertical-align:middle;flex:none;background:${w?w.color:'#e6e8eb'}">${svg}</span>`;
+}
+
 function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
 function save(k,v){localStorage.setItem(k,JSON.stringify(v));}
 function getRecords(){return load(LS.records,[]);}
@@ -308,7 +329,7 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
 let curMonth = monthKey();
 let curStatsMonth = monthKey();
 let billFilter = 'all'; // all | expense | income | catId
-let addState = {type:'expense',catId:null,date:todayStr(),account:'现金'};
+let addState = {type:'expense',catId:null,date:todayStr(),account:'现金',who:'male'};
 let catManageType = 'expense';
 
 /* ---------- 标签切换 ---------- */
@@ -340,22 +361,31 @@ function renderHome(){
   const recent=getRecords().slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
   const box=document.getElementById('home-recent');
   if(!recent.length){box.innerHTML='<div class="empty"><div class="big">📝</div>还没有记录，点下方 + 记一笔吧</div>';return;}
-  box.innerHTML=recent.map(r=>{
-    const c=getCat(r.category)||{name:r.category,icon:'❓',color:'#ccc'};
-    return `<div class="rec" onclick="editFromHome('${r.id}')">
-      <div class="ico" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
-      <div class="info"><div class="name">${c.name}</div><div class="note">${r.date} ${r.note||''}</div></div>
-      <div class="amt ${r.type}">${r.type==='income'?'+':'-'}${fmt(r.amount)}</div>
-    </div>`;
-  }).join('');
+  box.innerHTML=recent.map(r=>recRowHTML(r,`editFromHome('${r.id}')`,true)).join('');
 }
 function editFromHome(id){openAdd(getRecords().find(r=>r.id===id));}
 
+// 统一的记录卡片（首页最近 / 明细列表共用），按消费人加左边色条 + 头像
+function recRowHTML(r,click,showDate){
+  const c=getCat(r.category)||{name:r.category,icon:'❓',color:'#ccc'};
+  const whoCls=r.who==='male'?'who-male':r.who==='female'?'who-female':'';
+  const parts=[];
+  if(showDate)parts.push(r.date);
+  if(r.account)parts.push(r.account);
+  if(r.note)parts.push(r.note);
+  const note=parts.join(' ');
+  return `<div class="rec ${whoCls}" onclick="${click}">
+    <div class="ico" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
+    <div class="info"><div class="name">${c.name}</div><div class="note">${whoAvatar(r.who,16)} ${note}</div></div>
+    <div class="amt ${r.type}">${r.type==='income'?'+':'-'}${fmt(r.amount)}</div>
+  </div>`;
+}
+
 /* ---------- 记一笔 ---------- */
 function openAdd(rec){
-  addState={type:'expense',catId:null,date:todayStr(),account:'现金'};
+  addState={type:'expense',catId:null,date:todayStr(),account:'现金',who:'male'};
   if(rec){
-    addState={type:rec.type,catId:rec.category,date:rec.date,account:rec.account||'现金'};
+    addState={type:rec.type,catId:rec.category,date:rec.date,account:rec.account||'现金',who:rec.who||'male'};
     document.getElementById('amt').value=rec.amount;
     document.getElementById('add-note').value=rec.note||'';
     openAdd._edit=rec;
@@ -363,6 +393,7 @@ function openAdd(rec){
   setType(addState.type);
   document.getElementById('add-date').value=addState.date;
   renderAccountChips();
+  renderWhoChips();
   renderCatGrid();
   document.getElementById('mask').classList.add('show');
   document.getElementById('sheet').classList.add('show');
@@ -384,11 +415,20 @@ function renderAccountChips(){
   box.innerHTML=ACCOUNTS.map(a=>`<div class="chip ${a===addState.account?'on':''}" onclick="chooseAccount('${a}')">${a}</div>`).join('');
 }
 function chooseAccount(a){addState.account=a;renderAccountChips();}
+function renderWhoChips(){
+  const box=document.getElementById('who-chips');
+  box.innerHTML=['male','female'].map(f=>{
+    const w=WHO[f];const on=f===addState.who;
+    const style=on?`background:${w.color};color:#fff;border-color:${w.color}`:'';
+    return `<div class="chip ${on?'on':''}" style="${style}" onclick="chooseWho('${f}')">${whoAvatar(f,20)} ${w.label}</div>`;
+  }).join('');
+}
+function chooseWho(f){addState.who=f;renderWhoChips();}
 function saveRecord(){
   const amt=parseFloat(document.getElementById('amt').value);
   if(!amt||amt<=0){toast('请输入金额');return;}
   if(!addState.catId){toast('请选择分类');return;}
-  const data={type:addState.type,amount:Math.round(amt*100)/100,category:addState.catId,date:addState.date,account:addState.account,note:document.getElementById('add-note').value.trim(),ts:Date.now()};
+  const data={type:addState.type,amount:Math.round(amt*100)/100,category:addState.catId,date:addState.date,account:addState.account,who:addState.who,note:document.getElementById('add-note').value.trim(),ts:Date.now()};
   const recs=getRecords();
   if(openAdd._edit){
     const idx=recs.findIndex(r=>r.id===openAdd._edit.id);
@@ -417,10 +457,13 @@ function renderBills(){
   const chips=['<div class="chip '+(billFilter==='all'?'on':'')+'" onclick="setFilter(\'all\')">全部</div>',
     '<div class="chip '+(billFilter==='expense'?'on':'')+'" onclick="setFilter(\'expense\')">支出</div>',
     '<div class="chip '+(billFilter==='income'?'on':'')+'" onclick="setFilter(\'income\')">收入</div>']
+    .concat(['male','female'].map(f=>{const w=WHO[f];const on=billFilter===f;const style=on?`background:${w.color};color:#fff;border-color:${w.color}`:'';return `<div class="chip ${on?'on':''}" style="${style}" onclick="setFilter('${f}')"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${w.color};margin-right:5px;vertical-align:middle"></span>${w.label}</div>`;}))
     .concat(cats.map(c=>`<div class="chip ${billFilter===c.id?'on':''}" onclick="setFilter('${c.id}')">${c.icon}${c.name}</div>`));
   document.getElementById('bill-filters').innerHTML=chips.join('');
   let recs=getRecords().filter(r=>r.date.slice(0,7)===curMonth);
   if(billFilter==='expense'||billFilter==='income')recs=recs.filter(r=>r.type===billFilter);
+  else if(billFilter==='male')recs=recs.filter(r=>r.who==='male');
+  else if(billFilter==='female')recs=recs.filter(r=>r.who==='female');
   else if(billFilter!=='all')recs=recs.filter(r=>r.category===billFilter);
   recs.sort((a,b)=>b.date.localeCompare(a.date)||b.ts-a.ts);
   const box=document.getElementById('bill-list');
@@ -437,14 +480,7 @@ function renderBills(){
   Object.keys(groups).sort().reverse().forEach(d=>{
     const list=groups[d];let de=0,di=0;list.forEach(r=>r.type==='income'?di+=r.amount:de+=r.amount);
     html+=`<div class="day-group"><div class="day-head"><span>${d} ${'日一二三四五六'[new Date(d).getDay()]}</span><span>支 ¥${fmtShort(de)} · 收 ¥${fmtShort(di)}</span></div>`;
-    html+=list.map(r=>{
-      const c=getCat(r.category)||{name:r.category,icon:'❓',color:'#ccc'};
-      return `<div class="rec" onclick="delRecord('${r.id}')">
-        <div class="ico" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
-        <div class="info"><div class="name">${c.name}</div><div class="note">${r.account||''} ${r.note||''}</div></div>
-        <div class="amt ${r.type}">${r.type==='income'?'+':'-'}${fmt(r.amount)}</div>
-      </div>`;
-    }).join('');
+    html+=list.map(r=>recRowHTML(r,`delRecord('${r.id}')`,false)).join('');
     html+='</div>';
   });
   box.innerHTML=html;
@@ -593,8 +629,8 @@ function resetCategories(){
 function exportCSV(){
   const recs=getRecords().slice().sort((a,b)=>a.date.localeCompare(b.date));
   if(!recs.length){toast('没有数据可导出');return;}
-  const head='日期,类型,分类,账户,金额,备注';
-  const rows=recs.map(r=>{const c=getCat(r.category);return [r.date,r.type==='income'?'收入':'支出',c?c.name:r.category,r.account||'',r.amount,(r.note||'').replace(/,/g,'，')].join(',');});
+  const head='日期,类型,分类,账户,消费人,金额,备注';
+  const rows=recs.map(r=>{const c=getCat(r.category);return [r.date,r.type==='income'?'收入':'支出',c?c.name:r.category,r.account||'',r.who==='male'?'男':r.who==='female'?'女':'',r.amount,(r.note||'').replace(/,/g,'，')].join(',');});
   const csv='\ufeff'+head+'\n'+rows.join('\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='记账数据_'+todayStr()+'.csv';a.click();
