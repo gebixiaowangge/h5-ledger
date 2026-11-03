@@ -154,6 +154,14 @@
   .danger{color:var(--expense);}
   .toast{position:fixed;left:50%;top:40%;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;z-index:99;opacity:0;transition:opacity .2s;pointer-events:none;}
   .toast.show{opacity:1;}
+
+  /* 分类新增/编辑 */
+  .sheet .sheet-title{font-size:18px;font-weight:700;margin:4px 0 14px;}
+  .swatches{display:flex;flex-wrap:wrap;gap:10px;}
+  .swatch{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;box-shadow:0 0 0 2px #fff inset;}
+  .swatch.on{border-color:var(--text);}
+  #catedit-mask{z-index:60;}
+  #catedit-sheet{z-index:70;}
 </style>
 </head>
 <body>
@@ -270,7 +278,19 @@
     <div id="ct-income" onclick="setCatType('income')">收入</div>
   </div>
   <div id="cat-manage-list"></div>
-  <div class="field" style="margin-top:10px" onclick="addCategory()"><span class="k">➕</span><span class="val">新增分类</span></div>
+  <div class="field" style="margin-top:10px" onclick="openCatEditAdd(catManageType,'manage')"><span class="k">➕</span><span class="val">新增标签</span></div>
+</div>
+
+<!-- 新增/编辑标签 sheet -->
+<div class="mask" id="catedit-mask" onclick="closeCatEdit()"></div>
+<div class="sheet" id="catedit-sheet">
+  <div class="grab"></div>
+  <div class="sheet-title" id="catedit-title">新增标签</div>
+  <div class="field"><span class="k">名称</span><input id="catedit-name" placeholder="如：餐饮" maxlength="8" /></div>
+  <div class="field"><span class="k">图标</span><input id="catedit-icon" placeholder="emoji，如 🍜" maxlength="2" /></div>
+  <div class="field col"><span class="k">颜色</span><div class="chips swatches" id="catedit-colors"></div></div>
+  <button class="btn" onclick="saveCatEdit()">保存</button>
+  <button class="btn ghost" style="margin-top:10px" onclick="closeCatEdit()">取消</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -407,7 +427,10 @@ function renderCatGrid(){
   document.getElementById('cat-grid').innerHTML=cats.map(c=>`
     <div class="cat ${c.id===addState.catId?'on':''}" onclick="chooseCat('${c.id}')">
       <div class="ci" style="background:${c.color}22">${c.icon}</div>${c.name}
-    </div>`).join('');
+    </div>`).join('')+
+    `<div class="cat" onclick="openCatEditAdd(addState.type,'add')">
+      <div class="ci" style="background:var(--brand)22;color:var(--brand);font-weight:700">＋</div>新增
+    </div>`;
 }
 function chooseCat(id){addState.catId=id;renderCatGrid();}
 function renderAccountChips(){
@@ -591,33 +614,67 @@ function closeCategories(){document.getElementById('cat-mask').classList.remove(
 function setCatType(t){catManageType=t;document.getElementById('ct-expense').classList.toggle('on',t==='expense');document.getElementById('ct-income').classList.toggle('on',t==='income');renderCatManage();}
 function renderCatManage(){
   const cats=getCats().filter(c=>c.type===catManageType);
-  document.getElementById('cat-manage-list').innerHTML=cats.map(c=>`
-    <div class="list-item">
+  const recs=getRecords();
+  document.getElementById('cat-manage-list').innerHTML=cats.map(c=>{
+    const used=recs.some(r=>r.category===c.id);
+    return `<div class="list-item">
       <div class="ico" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
       <div class="nm">${c.name}</div>
-      <div class="act" onclick="editCategory('${c.id}')">编辑</div>
-      <div class="act danger" onclick="removeCategory('${c.id}')">删除</div>
-    </div>`).join('')||'<div class="empty">暂无分类</div>';
+      <div class="act" onclick="openCatEditEdit('${c.id}')">编辑</div>
+      ${used
+        ? `<div class="act" style="color:#cfd4da;font-size:12px">使用中</div>`
+        : `<div class="act danger" onclick="removeCategory('${c.id}')">删除</div>`}
+    </div>`;
+  }).join('')||'<div class="empty">暂无分类</div>';
 }
-function addCategory(){
-  const name=prompt('分类名称：');if(!name)return;
-  const icon=prompt('图标 emoji（如 🍜）：','🏷️');if(icon===null)return;
-  const color=prompt('颜色（十六进制，如 #ff7a3d）：','#ff7a3d');if(color===null)return;
-  const cats=getCats();cats.push({id:'c'+Date.now(),name:name.trim(),type:catManageType,icon:icon.trim()||'🏷️',color:color.trim()||'#ff7a3d'});
-  save(LS.cats,cats);renderCatManage();toast('已添加');
+/* ---------- 标签新增 / 编辑 ---------- */
+const CAT_COLORS=['#ff7a3d','#5b8def','#a66bff','#ff6b9d','#1bbf73','#ff5a5f','#f5a623','#5b6bff','#22c1c3','#9aa0a6'];
+let catEditState={mode:'add',id:null,type:'expense',name:'',icon:'',color:CAT_COLORS[0],from:'add'};
+function openCatEditAdd(type,from){
+  catEditState={mode:'add',id:null,type:type,from:from,name:'',icon:'',color:CAT_COLORS[0]};
+  showCatEdit('新增标签');
 }
-function editCategory(id){
-  const c=getCat(id);const name=prompt('分类名称：',c.name);if(!name)return;
-  const icon=prompt('图标 emoji：',c.icon);if(icon===null)return;
-  const color=prompt('颜色：',c.color);if(color===null)return;
-  const cats=getCats();const i=cats.findIndex(x=>x.id===id);
-  cats[i]={...c,name:name.trim(),icon:icon.trim()||c.icon,color:color.trim()||c.color};
-  save(LS.cats,cats);renderCatManage();toast('已修改');
+function openCatEditEdit(id){
+  const c=getCat(id);
+  catEditState={mode:'edit',id:id,type:c.type,from:'manage',name:c.name,icon:c.icon,color:c.color};
+  showCatEdit('编辑标签');
 }
+function showCatEdit(title){
+  document.getElementById('catedit-title').textContent=title;
+  document.getElementById('catedit-name').value=catEditState.name;
+  document.getElementById('catedit-icon').value=catEditState.icon;
+  renderCatEditColors();
+  document.getElementById('catedit-mask').classList.add('show');
+  document.getElementById('catedit-sheet').classList.add('show');
+}
+function renderCatEditColors(){
+  document.getElementById('catedit-colors').innerHTML=CAT_COLORS.map(col=>`<div class="swatch ${col===catEditState.color?'on':''}" style="background:${col}" onclick="chooseCatEditColor('${col}')"></div>`).join('');
+}
+function chooseCatEditColor(col){catEditState.color=col;renderCatEditColors();}
+function closeCatEdit(){document.getElementById('catedit-mask').classList.remove('show');document.getElementById('catedit-sheet').classList.remove('show');}
+function saveCatEdit(){
+  const name=document.getElementById('catedit-name').value.trim();
+  if(!name){toast('请输入名称');return;}
+  const icon=document.getElementById('catedit-icon').value.trim()||'🏷️';
+  const cats=getCats();
+  if(catEditState.mode==='add'){
+    const nc={id:'c'+Date.now(),name:name,type:catEditState.type,icon:icon,color:catEditState.color};
+    cats.push(nc);save(LS.cats,cats);
+    if(catEditState.from==='add'){addState.catId=nc.id;renderCatGrid();}
+    else{renderCatManage();}
+    closeCatEdit();toast('已新增');
+  }else{
+    const i=cats.findIndex(x=>x.id===catEditState.id);
+    cats[i]={...cats[i],name:name,icon:icon,color:catEditState.color};
+    save(LS.cats,cats);renderCatManage();closeCatEdit();toast('已修改');
+  }
+}
+
+/* ---------- 标签删除（使用中不可删） ---------- */
 function removeCategory(id){
   const used=getRecords().some(r=>r.category===id);
-  if(used&&!confirm('该分类已有记录，删除后记录的分类将显示为未知，仍要删除？'))return;
-  if(!used&&!confirm('确定删除该分类？'))return;
+  if(used){toast('该标签正在使用中，无法删除');return;}
+  if(!confirm('确定删除该标签？'))return;
   save(LS.cats,getCats().filter(c=>c.id!==id));renderCatManage();toast('已删除');
 }
 function resetCategories(){
