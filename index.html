@@ -573,7 +573,7 @@ function drawBar(){
   const max=Math.max(1,...data.map(d=>Math.max(d.inc,d.exp)));
   const padL=10,padR=10,baseY=205,topY=24,gap=12;
   const bw=(W-padL-padR-gap*(months.length-1))/2/months.length;
-  const palette=['#1bbf73','#ff5a5f'];
+  const palette=['#ff5a5f','#1bbf73'];
   data.forEach((d,i)=>{
     const x0=padL+i*(bw*2+gap);
     [d.exp,d.inc].forEach((v,j)=>{
