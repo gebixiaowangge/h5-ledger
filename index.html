@@ -133,6 +133,8 @@
   .month-pick{display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:14px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow);}
   .month-pick .m{font-size:16px;font-weight:700;}
   .month-pick .nav{font-size:20px;color:var(--brand);padding:0 8px;}
+  .who-banner{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow);font-size:14px;}
+  .who-banner b{font-size:16px;}
 
   /* stats */
   .chart-card{background:var(--card);border-radius:16px;padding:14px;box-shadow:var(--shadow);margin-bottom:14px;}
@@ -222,6 +224,11 @@
     <h3>近 6 个月盈余</h3>
     <canvas id="bar-surplus" height="200"></canvas>
     <div class="chart-sum" id="surplus-sum"></div>
+  </div>
+  <div class="chart-card">
+    <h3>男女收支对比（本月）</h3>
+    <canvas id="gender-bar" height="230"></canvas>
+    <div class="chart-sum" id="gender-sum"></div>
   </div>
 </div>
 
@@ -500,6 +507,12 @@ function renderBills(){
     <div style="text-align:center"><div style="font-size:12px;color:var(--sub)">支出</div><div style="color:var(--expense);font-weight:700">¥${fmtShort(exp)}</div></div>
     <div style="text-align:center"><div style="font-size:12px;color:var(--sub)">盈余</div><div style="color:${surplus>=0?'var(--income)':'var(--expense)'};font-weight:700">¥${fmtShort(surplus)}</div></div>
   </div>`;
+  if(billFilter==='male'||billFilter==='female'){
+    const w=WHO[billFilter];
+    html+=`<div class="who-banner" style="border-left:4px solid ${w.color}">
+      ${whoAvatar(billFilter,18)} <span style="color:${w.color};font-weight:700">${w.label}</span> 本月消费 <b style="color:${w.color}">¥${fmtShort(exp)}</b>${inc?` · 收入 ¥${fmtShort(inc)}`:''}
+    </div>`;
+  }
   Object.keys(groups).sort().reverse().forEach(d=>{
     const list=groups[d];let de=0,di=0;list.forEach(r=>r.type==='income'?di+=r.amount:de+=r.amount);
     html+=`<div class="day-group"><div class="day-head"><span>${d} ${'日一二三四五六'[new Date(d).getDay()]}</span><span>支 ¥${fmtShort(de)} · 收 ¥${fmtShort(di)}</span></div>`;
@@ -524,6 +537,7 @@ function renderStats(){
   drawPie(entries);
   drawBar();
   drawSurplus();
+  drawGenderChart();
 }
 // 统一处理 retina 缩放：位图 = 显示高 ×2，绘制坐标在逻辑空间 (0..W, 0..H)
 function setupCanvas(cv,H){
@@ -606,6 +620,36 @@ function drawSurplus(){
   ctx.strokeStyle='#e2e5ea';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(padL,midY);ctx.lineTo(W-padR,midY);ctx.stroke();
   const tot=data.reduce((s,d)=>s+d.val,0);
   document.getElementById('surplus-sum').textContent='近 6 个月  盈余 ¥'+fmtShort(tot);
+}
+// 男女收支对比（本月）：男(蓝)/女(粉) 各出 支出(红) 与 收入(绿) 两根柱
+function drawGenderChart(){
+  const {ctx,W,H}=setupCanvas(document.getElementById('gender-bar'),250);
+  const month=curStatsMonth;
+  const recs=getRecords().filter(r=>r.date.slice(0,7)===month);
+  const calc=who=>{let exp=0,inc=0;recs.filter(r=>r.who===who).forEach(r=>r.type==='income'?inc+=r.amount:exp+=r.amount);return{exp,inc};};
+  const data=[{label:'男',color:'#3b82f6',...calc('male')},{label:'女',color:'#ff6b9d',...calc('female')}];
+  const max=Math.max(1,...data.map(d=>Math.max(d.exp,d.inc)));
+  const padL=12,padR=12,baseY=205,topY=34,gap=46;
+  const groupW=(W-padL-padR-gap)/data.length;
+  const bw=groupW/2.6;
+  const palette={exp:'#ff5a5f',inc:'#1bbf73'};
+  data.forEach((d,gi)=>{
+    const gx=padL+gi*(groupW+gap);
+    ['exp','inc'].forEach((k,bi)=>{
+      const v=d[k];
+      const h=v/max*(baseY-topY);
+      ctx.fillStyle=palette[k];
+      ctx.fillRect(gx+bi*(bw+4),baseY-h,bw,h);
+      if(v>0){ctx.fillStyle='#1f2329';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText('¥'+fmtShort(v),gx+bi*(bw+4)+bw/2,baseY-h-4);}
+    });
+    ctx.fillStyle=d.color;ctx.beginPath();ctx.arc(gx+groupW/2-16,baseY+12,5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#1f2329';ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText(d.label,gx+groupW/2+2,baseY+16);
+  });
+  // 图例
+  ctx.textAlign='left';ctx.font='11px sans-serif';
+  ctx.fillStyle='#ff5a5f';ctx.fillRect(padL,baseY+30,10,10);ctx.fillStyle='#8a9099';ctx.fillText('支出',padL+14,baseY+39);
+  ctx.fillStyle='#1bbf73';ctx.fillRect(padL+58,baseY+30,10,10);ctx.fillStyle='#8a9099';ctx.fillText('收入',padL+72,baseY+39);
+  document.getElementById('gender-sum').textContent='男 消费¥'+fmtShort(data[0].exp)+' 收入¥'+fmtShort(data[0].inc)+' · 女 消费¥'+fmtShort(data[1].exp)+' 收入¥'+fmtShort(data[1].inc);
 }
 
 /* ---------- 分类管理 ---------- */
