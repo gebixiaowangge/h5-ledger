@@ -237,6 +237,9 @@
   <div class="topbar"><h1>我的</h1><div class="sub">同 WiFi 可备份到电脑</div></div>
   <div class="list-item" onclick="openCategories()"><div class="ico" style="background:#fff3ec;color:var(--brand)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h10.4a1.5 1.5 0 0 1 1.06.44l3.1 3.1a1.5 1.5 0 0 1 0 2.12l-3.1 3.1A1.5 1.5 0 0 1 14.9 15H4.5A1.5 1.5 0 0 1 3 13.5z"/><circle cx="8" cy="10.5" r="1.3"/></svg></div><div class="nm">分类管理</div><div class="act">›</div></div>
   <div class="list-item" onclick="exportCSV()"><div class="ico" style="background:#eafaf1;color:var(--income)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 9.5 12 14l4.5-4.5"/><path d="M4 19h16"/></svg></div><div class="nm">导出 CSV</div><div class="act">›</div></div>
+  <div class="list-item" onclick="exportJSON()"><div class="ico" style="background:#eafaf1;color:var(--income)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="M9.5 15.5 12 18l2.5-2.5"/></svg></div><div class="nm">导出数据(JSON)</div><div class="act">›</div></div>
+  <div class="list-item" onclick="document.getElementById('import-json').click()"><div class="ico" style="background:#eaf2ff;color:#3b82f6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 6v6"/><path d="M9.5 10.5 12 8l2.5 2.5"/></svg></div><div class="nm">导入数据(JSON)</div><div class="act">›</div></div>
+  <input type="file" id="import-json" accept="application/json,.json" style="display:none" onchange="importJSON(this.files[0])" />
   <div class="list-item" onclick="resetCategories()"><div class="ico" style="background:#eef1ff;color:#5b6bff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-1.8 5.1"/><path d="M20 5v6h-6"/></svg></div><div class="nm">恢复默认分类</div><div class="act">›</div></div>
   <div class="list-item" onclick="backupToComputer()"><div class="ico" style="background:#eaf2ff;color:#3b82f6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 9.5 12 14l4.5-4.5"/><path d="M4 19h16"/></svg></div><div class="nm">备份到电脑</div><div class="act">›</div></div>
   <div class="list-item" onclick="restoreFromComputer()"><div class="ico" style="background:#eaf2ff;color:#3b82f6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M7.5 14.5 12 10l4.5 4.5"/><path d="M4 5h16"/></svg></div><div class="nm">从电脑恢复</div><div class="act">›</div></div>
@@ -810,6 +813,30 @@ function exportCSV(){
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='记账数据_'+todayStr()+'.csv';a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);toast('已导出 CSV');
+}
+function exportJSON(){
+  const state=collectState();
+  if((!state.records||!state.records.length)&&(!state.cats||!state.cats.length)){toast('没有数据可导出');return;}
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='记账数据_'+todayStr()+'.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);toast('已导出 JSON');
+}
+function importJSON(file){
+  if(!file){return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const d=JSON.parse(e.target.result);
+      if(!d||(!Array.isArray(d.records)&&!Array.isArray(d.cats))){toast('文件格式不正确');return;}
+      const merged=mergeStates(collectState(),d);
+      applyState(merged);
+      renderHome();renderBills();renderStats();
+      if(SYNC&&SYNC.ok)pushToServer();
+      toast('已导入数据');
+    }catch(err){toast('导入失败：'+err.message);}
+  };
+  reader.readAsText(file);
+  document.getElementById('import-json').value='';
 }
 function clearAll(){
   if(!confirm('将清空全部记录和分类，且无法恢复！确定？'))return;
