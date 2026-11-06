@@ -234,12 +234,15 @@
 
 <!-- 我的 -->
 <div class="page" id="page-mine">
-  <div class="topbar"><h1>我的</h1><div class="sub">数据仅存于本机</div></div>
+  <div class="topbar"><h1>我的</h1><div class="sub">同 WiFi 可备份到电脑</div></div>
   <div class="list-item" onclick="openCategories()"><div class="ico" style="background:#fff3ec;color:var(--brand)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h10.4a1.5 1.5 0 0 1 1.06.44l3.1 3.1a1.5 1.5 0 0 1 0 2.12l-3.1 3.1A1.5 1.5 0 0 1 14.9 15H4.5A1.5 1.5 0 0 1 3 13.5z"/><circle cx="8" cy="10.5" r="1.3"/></svg></div><div class="nm">分类管理</div><div class="act">›</div></div>
   <div class="list-item" onclick="exportCSV()"><div class="ico" style="background:#eafaf1;color:var(--income)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 9.5 12 14l4.5-4.5"/><path d="M4 19h16"/></svg></div><div class="nm">导出 CSV</div><div class="act">›</div></div>
   <div class="list-item" onclick="resetCategories()"><div class="ico" style="background:#eef1ff;color:#5b6bff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-1.8 5.1"/><path d="M20 5v6h-6"/></svg></div><div class="nm">恢复默认分类</div><div class="act">›</div></div>
+  <div class="list-item" onclick="backupToComputer()"><div class="ico" style="background:#eaf2ff;color:#3b82f6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M7.5 9.5 12 14l4.5-4.5"/><path d="M4 19h16"/></svg></div><div class="nm">备份到电脑</div><div class="act">›</div></div>
+  <div class="list-item" onclick="restoreFromComputer()"><div class="ico" style="background:#eaf2ff;color:#3b82f6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V10"/><path d="M7.5 14.5 12 10l4.5 4.5"/><path d="M4 5h16"/></svg></div><div class="nm">从电脑恢复</div><div class="act">›</div></div>
+  <div id="sync-status" style="padding:4px 14px;color:var(--sub);font-size:12px;line-height:1.5">检测中…</div>
   <div class="list-item danger" onclick="clearAll()"><div class="ico" style="background:#ffeaea;color:var(--expense)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/></svg></div><div class="nm">清空所有数据</div><div class="act">›</div></div>
-  <div style="text-align:center;color:var(--sub);font-size:12px;margin:24px 0 8px;">数据保存在本机浏览器，换设备或清缓存会丢失<br/>建议定期导出 CSV 备份</div>
+  <div style="text-align:center;color:var(--sub);font-size:12px;margin:24px 0 8px;">数据默认存于本机浏览器，清缓存/换设备会丢失<br/>同 WiFi 下用电脑地址打开可自动备份到电脑，丢失后点「从电脑恢复」</div>
 </div>
 
 <!-- 记一笔 FAB -->
@@ -340,7 +343,77 @@ function whoAvatar(who,size){
 }
 
 function load(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
-function save(k,v){localStorage.setItem(k,JSON.stringify(v));}
+function save(k,v){localStorage.setItem(k,JSON.stringify(v));scheduleSync();}
+
+/* ---------- 电脑备份（同 WiFi 局域网同步） ---------- */
+const SYNC={ok:false,ready:false,pending:false,lastSync:0,token:''};
+function scheduleSync(){
+  if(!SYNC.ok)return;
+  if(!SYNC.ready){SYNC.pending=true;return;}
+  clearTimeout(scheduleSync._t);
+  scheduleSync._t=setTimeout(()=>{pushToServer();},600);
+}
+function collectState(){return {records:getRecords(),cats:getCats()};}
+function applyState(s){
+  if(!s)return;
+  if(Array.isArray(s.records))save(LS.records,s.records);
+  if(Array.isArray(s.cats)&&s.cats.length)save(LS.cats,s.cats);
+}
+function mergeStates(local,server){
+  server=server||{records:[],cats:[]};local=local||{records:[],cats:[]};
+  const m={records:[],cats:[]};const rIds=new Set();
+  server.records.forEach(r=>{m.records.push(r);rIds.add(r.id);});
+  local.records.forEach(r=>{if(rIds.has(r.id)){const i=m.records.findIndex(x=>x.id===r.id);m.records[i]=r;}else m.records.push(r);});
+  const cIds=new Set();
+  server.cats.forEach(c=>{m.cats.push(c);cIds.add(c.id);});
+  local.cats.forEach(c=>{if(!cIds.has(c.id))m.cats.push(c);});
+  return m;
+}
+function apiHeaders(){const h={'Content-Type':'application/json'};if(SYNC.token)h['x-ledger-token']=SYNC.token;return h;}
+function pushToServer(state){
+  state=state||collectState();
+  return fetch('/api/save',{method:'POST',headers:apiHeaders(),body:JSON.stringify({data:state})})
+    .then(r=>r.json()).then(d=>{if(d&&d.ok){SYNC.lastSync=Date.now();SYNC.ok=true;updateSyncUI();}return d;})
+    .catch(()=>{SYNC.ok=false;updateSyncUI();});
+}
+function pullFromServer(){return fetch('/api/load',{headers:apiHeaders()}).then(r=>r.json()).then(d=>(d&&d.data)||null).catch(()=>null);}
+function pingServer(){return fetch('/api/ping',{headers:apiHeaders()}).then(r=>r.ok).catch(()=>false);}
+async function initSync(){
+  SYNC.ok=await pingServer();
+  if(SYNC.ok){
+    try{
+      const serverData=await pullFromServer();
+      const localData=collectState();
+      const merged=mergeStates(localData,serverData);
+      applyState(merged);
+      const base=serverData||{records:[],cats:[]};
+      if(JSON.stringify(merged)!==JSON.stringify(base)){await pushToServer(merged);}
+      SYNC.lastSync=Date.now();
+    }catch(e){}
+  }
+  SYNC.ready=true;
+  if(SYNC.pending&&SYNC.ok){SYNC.pending=false;pushToServer();}
+  updateSyncUI();renderHome();
+}
+function backupToComputer(){
+  if(!SYNC.ok){toast('未连接电脑，请先在同 WiFi 下用电脑地址打开本页');return;}
+  pushToServer().then(()=>toast('已备份到电脑'));
+}
+function restoreFromComputer(){
+  if(!SYNC.ok){toast('未连接电脑');return;}
+  pullFromServer().then(d=>{
+    if(!d||((!d.records||!d.records.length)&&(!d.cats||!d.cats.length))){toast('电脑里还没有备份');return;}
+    const merged=mergeStates(collectState(),d);
+    applyState(merged);SYNC.lastSync=Date.now();
+    renderHome();renderBills();renderStats();toast('已从电脑恢复');
+  });
+}
+function updateSyncUI(){
+  const el=document.getElementById('sync-status');if(!el)return;
+  if(SYNC.ok){const t=SYNC.lastSync?new Date(SYNC.lastSync).toLocaleString('zh-CN'):'—';el.innerHTML='<span style="color:#1bbf73">●</span> 已连接电脑，自动同步已开启 · 上次 '+t;}
+  else{el.innerHTML='<span style="color:#cfd4da">●</span> 未连接电脑（用电脑地址打开本页即可自动备份/恢复）';}
+}
+function renderMine(){updateSyncUI();}
 function getRecords(){return load(LS.records,[]);}
 function getCats(){let c=load(LS.cats,null);if(!c){c=DEFAULT_CATS.slice();save(LS.cats,c);}return c;}
 function getCat(id){return getCats().find(c=>c.id===id);}
@@ -367,6 +440,7 @@ function goTab(t){
   if(t==='home')renderHome();
   if(t==='bills')renderBills();
   if(t==='stats')renderStats();
+  if(t==='mine')renderMine();
 }
 
 /* ---------- 首页 ---------- */
@@ -744,7 +818,7 @@ function clearAll(){
 }
 
 /* ---------- 初始化 ---------- */
-getCats();renderHome();
+getCats();renderHome();initSync();
 window.addEventListener('resize',()=>{if(document.getElementById('page-stats').classList.contains('active'))renderStats();});
 </script>
 </body>
