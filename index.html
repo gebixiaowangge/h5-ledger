@@ -410,12 +410,16 @@ function backupToComputer(){
 function restoreFromComputer(){
   if(location.protocol==='https:'){toast('当前是 https 页面，无法连电脑，请改用电脑局域网 http 地址打开');return;}
   if(!SYNC.ok){toast('未连接电脑');return;}
+  toast('正在从电脑恢复…');
   pullFromServer().then(d=>{
     if(!d||((!d.records||!d.records.length)&&(!d.cats||!d.cats.length))){toast('电脑里还没有备份');return;}
     const merged=mergeStates(collectState(),d);
     applyState(merged);SYNC.lastSync=Date.now();
-    renderHome();renderBills();renderStats();toast('已从电脑恢复');
-  });
+    try{renderHome();}catch(e){}
+    try{renderBills();}catch(e){}
+    updateSyncUI();
+    toast('已从电脑恢复 '+merged.records.length+' 条记录');
+  }).catch(e=>{toast('恢复失败：'+(e&&e.message?e.message:e));});
 }
 function updateSyncUI(){
   const el=document.getElementById('sync-status');if(!el)return;
