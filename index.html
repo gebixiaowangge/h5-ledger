@@ -357,9 +357,26 @@ function scheduleSync(){
   scheduleSync._t=setTimeout(()=>{pushToServer();},600);
 }
 function collectState(){return {records:getRecords(),cats:getCats()};}
+function normalizeRecord(r){
+  if(!r||typeof r!=='object')return null;
+  const today=todayStr();
+  return {
+    id:r.id||('r'+Date.now()+Math.random().toString(36).slice(2,6)),
+    type:(r.type==='income'||r.type==='expense')?r.type:'expense',
+    amount:Number(r.amount)||0,
+    category:r.category||'',
+    date:(typeof r.date==='string'&&r.date)?r.date:today,
+    account:r.account||'现金',
+    who:(r.who==='male'||r.who==='female')?r.who:'male',
+    note:r.note||''
+  };
+}
 function applyState(s){
   if(!s)return;
-  if(Array.isArray(s.records))save(LS.records,s.records);
+  if(Array.isArray(s.records)){
+    const recs=s.records.map(normalizeRecord).filter(Boolean);
+    save(LS.records,recs);
+  }
   if(Array.isArray(s.cats)&&s.cats.length)save(LS.cats,s.cats);
 }
 function mergeStates(local,server){
@@ -373,14 +390,44 @@ function mergeStates(local,server){
   return m;
 }
 function apiHeaders(){const h={'Content-Type':'application/json'};if(SYNC.token)h['x-ledger-token']=SYNC.token;return h;}
+// JSONP 探测/取数：脚本方式不受 fetch/XHR 在微信等内置浏览器里的局域网限制
+function jsonp(url,timeoutMs){
+  return new Promise((resolve)=>{
+    const cb='__lp'+Math.random().toString(36).slice(2);
+    const s=document.createElement('script');let done=false;
+    const t=setTimeout(()=>{if(done)return;done=true;cleanup();resolve(null);},timeoutMs||5000);
+    function cleanup(){clearTimeout(t);if(s.parentNode)try{s.parentNode.removeChild(s);}catch(e){}try{delete window[cb];}catch(e){}}
+    window[cb]=function(d){if(done)return;done=true;cleanup();resolve(d);};
+    s.onerror=function(){if(done)return;done=true;cleanup();resolve(null);};
+    s.src=url+(url.indexOf('?')>=0?'&':'?')+'cb='+encodeURIComponent(cb)+'&_='+Date.now();
+    document.head.appendChild(s);
+  });
+}
 function pushToServer(state){
   state=state||collectState();
-  return fetch('/api/save',{method:'POST',headers:apiHeaders(),body:JSON.stringify({data:state})})
+  const body=JSON.stringify({data:state});
+  return fetch('/api/save',{method:'POST',headers:apiHeaders(),body:body})
     .then(r=>r.json()).then(d=>{if(d&&d.ok){SYNC.lastSync=Date.now();SYNC.ok=true;updateSyncUI();}return d;})
-    .catch(()=>{SYNC.ok=false;updateSyncUI();});
+    .catch(()=>{
+      // 回退：sendBeacon（部分浏览器/微信内置浏览器限制 fetch）
+      try{
+        const blob=new Blob([body],{type:'application/json'});
+        if(navigator.sendBeacon&&navigator.sendBeacon('/api/save',blob)){
+          SYNC.lastSync=Date.now();SYNC.ok=true;updateSyncUI();
+          return {ok:true,beacon:true};
+        }
+      }catch(e){}
+      SYNC.ok=false;updateSyncUI();return {ok:false};
+    });
 }
-function pullFromServer(){return fetch('/api/load',{headers:apiHeaders()}).then(r=>r.json()).then(d=>(d&&d.data)||null).catch(()=>null);}
-function pingServer(){return fetch('/api/ping',{headers:apiHeaders()}).then(r=>r.ok).catch(()=>false);}
+function pullFromServer(){
+  return fetch('/api/load',{headers:apiHeaders()}).then(r=>r.json()).then(d=>(d&&d.data)||null).catch(()=>null)
+    .then(d=> d ? d : jsonp('/api/load').then(x=>(x&&x.data)||null));
+}
+function pingServer(){
+  return fetch('/api/ping',{headers:apiHeaders()}).then(r=>r.ok).catch(()=>false)
+    .then(ok=> ok ? true : jsonp('/api/ping').then(d=>!!(d&&d.ok)));
+}
 async function initSync(){
   if(location.protocol==='https:'){
     SYNC.ok=false; // https 页面（如 github.io）浏览器禁止直连局域网 http 服务（混合内容限制）
@@ -423,12 +470,12 @@ function restoreFromComputer(){
 }
 function updateSyncUI(){
   const el=document.getElementById('sync-status');if(!el)return;
-  if(SYNC.ok){const t=SYNC.lastSync?new Date(SYNC.lastSync).toLocaleString('zh-CN'):'—';el.innerHTML='<span style="color:#1bbf73">●</span> 已连接电脑，自动同步已开启 · 上次 '+t;}
+  if(SYNC.ok){const t=SYNC.lastSync?new Date(SYNC.lastSync).toLocaleString('zh-CN'):'—';el.innerHTML='<span style="color:#1bbf73">●</span> 已连接电脑，自动同步已开启 · 上次 '+t+' &nbsp;<a href="javascript:void(0)" onclick="initSync();toast(\'重新连接中…\')" style="color:#3b82f6">重试</a>';}
   else if(location.protocol==='https:'){el.innerHTML='<span style="color:#ff9f43">●</span> 当前用 https 页面（如 github.io）打开，浏览器禁止直连电脑局域网服务。<br>请用电脑的局域网地址 <b>http://电脑IP:8787</b> 打开本页（同一 WiFi）才能备份/恢复。';}
-  else{el.innerHTML='<span style="color:#cfd4da">●</span> 未连接电脑（用电脑地址打开本页，并确保电脑同步服务已启动）';}
+  else{el.innerHTML='<span style="color:#cfd4da">●</span> 未连接电脑。<br>若你是用微信内置浏览器打开，微信可能限制了局域网 HTTP 请求：请点右上角 <b>···</b> → <b>在浏览器中打开</b>（用 Safari 打开）即可正常备份/恢复。<br>也请确认电脑同步服务已启动、手机与电脑在同一 WiFi。 &nbsp;<a href="javascript:void(0)" onclick="initSync();toast(\'重新连接中…\')" style="color:#3b82f6">重试</a>';}
 }
 function renderMine(){updateSyncUI();}
-function getRecords(){return load(LS.records,[]);}
+function getRecords(){return load(LS.records,[]).map(normalizeRecord).filter(Boolean);}
 function getCats(){let c=load(LS.cats,null);if(!c){c=DEFAULT_CATS.slice();save(LS.cats,c);}return c;}
 function getCat(id){return getCats().find(c=>c.id===id);}
 
@@ -828,10 +875,48 @@ function exportCSV(){
 function exportJSON(){
   const state=collectState();
   if((!state.records||!state.records.length)&&(!state.cats||!state.cats.length)){toast('没有数据可导出');return;}
-  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='记账数据_'+todayStr()+'.json';a.click();
+  const text=JSON.stringify(state,null,2);
+  const fname='记账数据_'+todayStr()+'.json';
+  // 优先：系统分享（Safari/iOS 可直达「存储到文件」）
+  if(navigator.share&&navigator.canShare){
+    try{
+      const file=new File([text],fname,{type:'application/json'});
+      if(navigator.canShare({files:[file]})){
+        navigator.share({files:[file],title:fname}).then(()=>{}).catch(()=>{});
+        return;
+      }
+    }catch(e){/* 降级 */}
+  }
+  // 次选：剪贴板拷贝（微信等受限环境）
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>{
+      showJsonCopySheet(text);
+    }).catch(()=>{showJsonCopySheet(text);});
+    return;
+  }
+  // 兜底：传统下载
+  const blob=new Blob([text],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=fname;a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);toast('已导出 JSON');
 }
+function showJsonCopySheet(text){
+  let sheet=document.getElementById('json-copy-sheet');
+  if(!sheet){
+    sheet=document.createElement('div');sheet.id='json-copy-sheet';sheet.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:9999;';
+    sheet.innerHTML='<div style="background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:18px;box-sizing:border-box;">'
+      +'<div style="font-size:15px;font-weight:600;margin-bottom:6px;">已复制 JSON，可粘贴保存</div>'
+      +'<div style="font-size:12px;color:#888;margin-bottom:10px;">长按下方文本框全选 → 拷贝，再粘到「备忘录 / 文件传输助手 / 文件」即可保存</div>'
+      +'<textarea id="json-copy-text" readonly style="width:100%;height:200px;border:1px solid #e3e6ea;border-radius:10px;padding:10px;font-size:11px;font-family:monospace;box-sizing:border-box;resize:none;"></textarea>'
+      +'<button onclick="closeJsonCopySheet()" style="margin-top:12px;width:100%;padding:12px;border:none;border-radius:10px;background:#ff7a18;color:#fff;font-size:15px;">关闭</button>'
+      +'</div>';
+    sheet.addEventListener('click',e=>{if(e.target===sheet)closeJsonCopySheet();});
+    document.body.appendChild(sheet);
+  }
+  document.getElementById('json-copy-text').value=text;
+  sheet.style.display='flex';
+  setTimeout(()=>{const t=document.getElementById('json-copy-text');if(t){t.focus();t.select();}},50);
+}
+function closeJsonCopySheet(){const s=document.getElementById('json-copy-sheet');if(s)s.style.display='none';}
 function importJSON(file){
   if(!file){return;}
   const reader=new FileReader();
