@@ -382,27 +382,33 @@ function pushToServer(state){
 function pullFromServer(){return fetch('/api/load',{headers:apiHeaders()}).then(r=>r.json()).then(d=>(d&&d.data)||null).catch(()=>null);}
 function pingServer(){return fetch('/api/ping',{headers:apiHeaders()}).then(r=>r.ok).catch(()=>false);}
 async function initSync(){
-  SYNC.ok=await pingServer();
-  if(SYNC.ok){
-    try{
-      const serverData=await pullFromServer();
-      const localData=collectState();
-      const merged=mergeStates(localData,serverData);
-      applyState(merged);
-      const base=serverData||{records:[],cats:[]};
-      if(JSON.stringify(merged)!==JSON.stringify(base)){await pushToServer(merged);}
-      SYNC.lastSync=Date.now();
-    }catch(e){}
+  if(location.protocol==='https:'){
+    SYNC.ok=false; // https 页面（如 github.io）浏览器禁止直连局域网 http 服务（混合内容限制）
+  }else{
+    SYNC.ok=await pingServer();
+    if(SYNC.ok){
+      try{
+        const serverData=await pullFromServer();
+        const localData=collectState();
+        const merged=mergeStates(localData,serverData);
+        applyState(merged);
+        const base=serverData||{records:[],cats:[]};
+        if(JSON.stringify(merged)!==JSON.stringify(base)){await pushToServer(merged);}
+        SYNC.lastSync=Date.now();
+      }catch(e){}
+    }
   }
   SYNC.ready=true;
   if(SYNC.pending&&SYNC.ok){SYNC.pending=false;pushToServer();}
   updateSyncUI();renderHome();
 }
 function backupToComputer(){
+  if(location.protocol==='https:'){toast('当前是 https 页面，无法连电脑，请改用电脑局域网 http 地址打开');return;}
   if(!SYNC.ok){toast('未连接电脑，请先在同 WiFi 下用电脑地址打开本页');return;}
   pushToServer().then(()=>toast('已备份到电脑'));
 }
 function restoreFromComputer(){
+  if(location.protocol==='https:'){toast('当前是 https 页面，无法连电脑，请改用电脑局域网 http 地址打开');return;}
   if(!SYNC.ok){toast('未连接电脑');return;}
   pullFromServer().then(d=>{
     if(!d||((!d.records||!d.records.length)&&(!d.cats||!d.cats.length))){toast('电脑里还没有备份');return;}
@@ -414,7 +420,8 @@ function restoreFromComputer(){
 function updateSyncUI(){
   const el=document.getElementById('sync-status');if(!el)return;
   if(SYNC.ok){const t=SYNC.lastSync?new Date(SYNC.lastSync).toLocaleString('zh-CN'):'—';el.innerHTML='<span style="color:#1bbf73">●</span> 已连接电脑，自动同步已开启 · 上次 '+t;}
-  else{el.innerHTML='<span style="color:#cfd4da">●</span> 未连接电脑（用电脑地址打开本页即可自动备份/恢复）';}
+  else if(location.protocol==='https:'){el.innerHTML='<span style="color:#ff9f43">●</span> 当前用 https 页面（如 github.io）打开，浏览器禁止直连电脑局域网服务。<br>请用电脑的局域网地址 <b>http://电脑IP:8787</b> 打开本页（同一 WiFi）才能备份/恢复。';}
+  else{el.innerHTML='<span style="color:#cfd4da">●</span> 未连接电脑（用电脑地址打开本页，并确保电脑同步服务已启动）';}
 }
 function renderMine(){updateSyncUI();}
 function getRecords(){return load(LS.records,[]);}
