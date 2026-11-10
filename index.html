@@ -316,6 +316,7 @@
 const LS = {
   records:'h5_ledger_records',
   cats:'h5_ledger_cats',
+  deleted:'h5_ledger_deleted',
 };
 const DEFAULT_CATS = [
   {id:'c1',name:'餐饮',type:'expense',icon:'🍜',color:'#ff7a3d'},
@@ -359,7 +360,7 @@ function scheduleSync(){
   clearTimeout(scheduleSync._t);
   scheduleSync._t=setTimeout(()=>{pushToServer();},600);
 }
-function collectState(){return {records:getRecords(),cats:getCats()};}
+function collectState(){return {records:getRecords(),cats:getCats(),deleted:load(LS.deleted,[])};}
 function normalizeRecord(r){
   if(!r||typeof r!=='object')return null;
   const today=todayStr();
@@ -376,17 +377,25 @@ function normalizeRecord(r){
 }
 function applyState(s){
   if(!s)return;
+  const del=new Set(Array.isArray(s.deleted)?s.deleted:[]);
   if(Array.isArray(s.records)){
-    const recs=s.records.map(normalizeRecord).filter(Boolean);
+    const recs=s.records.map(normalizeRecord).filter(Boolean).filter(r=>!del.has(r.id));
     save(LS.records,recs);
   }
   if(Array.isArray(s.cats)&&s.cats.length)save(LS.cats,s.cats);
+  if(del.size){
+    const myDel=load(LS.deleted,[]);
+    del.forEach(x=>{if(!myDel.includes(x))myDel.push(x);});
+    save(LS.deleted,myDel);
+  }
 }
 function mergeStates(local,server){
-  server=server||{records:[],cats:[]};local=local||{records:[],cats:[]};
-  const m={records:[],cats:[]};const rIds=new Set();
-  server.records.forEach(r=>{m.records.push(r);rIds.add(r.id);});
-  local.records.forEach(r=>{if(rIds.has(r.id)){const i=m.records.findIndex(x=>x.id===r.id);m.records[i]=r;}else m.records.push(r);});
+  server=server||{records:[],cats:[],deleted:[]};local=local||{records:[],cats:[],deleted:[]};
+  const delSet=new Set([...(local.deleted||[]),...(server.deleted||[])]);
+  const m={records:[],cats:[],deleted:[...delSet]};
+  const rIds=new Set();
+  server.records.forEach(r=>{ if(delSet.has(r.id))return; m.records.push(r);rIds.add(r.id); });
+  local.records.forEach(r=>{ if(delSet.has(r.id))return; if(rIds.has(r.id)){const i=m.records.findIndex(x=>x.id===r.id);m.records[i]=r;}else m.records.push(r); });
   const cIds=new Set();
   server.cats.forEach(c=>{m.cats.push(c);cIds.add(c.id);});
   local.cats.forEach(c=>{if(!cIds.has(c.id))m.cats.push(c);});
@@ -654,6 +663,8 @@ function saveRecord(){
 function delRecord(id){
   if(!confirm('确定删除这条记录？'))return;
   save(LS.records,getRecords().filter(r=>r.id!==id));
+  const del=load(LS.deleted,[]); if(!del.includes(id))del.push(id);
+  save(LS.deleted,del);
   renderBills();renderHome();toast('已删除');
 }
 
