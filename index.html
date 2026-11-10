@@ -48,7 +48,7 @@
   /* record list */
   .day-group{margin-bottom:12px;}
   .day-head{font-size:12px;color:var(--sub);padding:4px 2px;display:flex;justify-content:space-between;}
-  .rec{display:flex;align-items:center;background:var(--card);border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:var(--shadow);}
+  .rec{display:flex;align-items:center;background:var(--card);border-radius:14px;padding:12px;box-shadow:var(--shadow);transition:transform .2s;will-change:transform;}
   .rec .ico{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-right:12px;flex:none;}
   .rec .info{flex:1;min-width:0;}
   .rec .info .name{font-size:15px;font-weight:600;}
@@ -59,6 +59,9 @@
   .rec.who-male{border-left:4px solid #3b82f6;}
   .rec.who-female{border-left:4px solid #ff6b9d;}
   .rec .note .who-mini{margin-right:4px;}
+  .rec-wrap{position:relative;overflow:hidden;border-radius:14px;margin-bottom:8px;}
+  .rec-wrap .rec-del{position:absolute;top:0;right:0;bottom:0;width:88px;display:flex;align-items:center;justify-content:center;background:#ff4d4f;color:#fff;}
+  @media(hover:hover){.rec-wrap:hover .rec{transform:translateX(-88px);}}
 
   /* add FAB — center of bottom nav, protruding up */
   .fab{
@@ -523,12 +526,13 @@ function renderHome(){
   const recent=getRecords().slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
   const box=document.getElementById('home-recent');
   if(!recent.length){box.innerHTML='<div class="empty"><div class="big">📝</div>还没有记录，点下方 + 记一笔吧</div>';return;}
-  box.innerHTML=recent.map(r=>recRowHTML(r,`editFromHome('${r.id}')`,true)).join('');
+  box.innerHTML=recent.map(r=>recRowHTML(r,true)).join('');bindSwipeRows(box);
 }
 function editFromHome(id){openAdd(getRecords().find(r=>r.id===id));}
 
 // 统一的记录卡片（首页最近 / 明细列表共用），按消费人加左边色条 + 头像
-function recRowHTML(r,click,showDate){
+// 点击卡片 = 查看/编辑；左滑 = 露出删除按钮
+function recRowHTML(r,showDate){
   const c=getCat(r.category)||{name:r.category,icon:'❓',color:'#ccc'};
   const whoCls=r.who==='male'?'who-male':r.who==='female'?'who-female':'';
   const parts=[];
@@ -536,12 +540,54 @@ function recRowHTML(r,click,showDate){
   if(r.account)parts.push(r.account);
   if(r.note)parts.push(r.note);
   const note=parts.join(' ');
-  return `<div class="rec ${whoCls}" onclick="${click}">
-    <div class="ico" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
-    <div class="info"><div class="name">${c.name}</div><div class="note">${whoAvatar(r.who,16)} ${note}</div></div>
-    <div class="amt ${r.type}">${r.type==='income'?'+':'-'}${fmt(r.amount)}</div>
+  return `<div class="rec-wrap ${whoCls}" data-id="${r.id}">
+    <div class="rec-del" onclick="delRecord('${r.id}')"><span style="font-size:18px">🗑</span></div>
+    <div class="rec">
+      <div class="ico" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
+      <div class="info"><div class="name">${c.name}</div><div class="note">${whoAvatar(r.who,16)} ${note}</div></div>
+      <div class="amt ${r.type}">${r.type==='income'?'+':'-'}${fmt(r.amount)}</div>
+    </div>
   </div>`;
 }
+function bindSwipeRows(scope){
+  const root=typeof scope==='string'?document.getElementById(scope):scope;
+  if(!root)return;
+  if(!window._swipeDocBound){
+    window._swipeDocBound=true;
+    document.addEventListener('click',function(e){
+      if(!e.target.closest||!e.target.closest('.rec-wrap')){
+        document.querySelectorAll('.rec-wrap.open').forEach(function(w){w.classList.remove('open');var c=w.querySelector('.rec');c.style.transition='transform .2s';c.style.transform='translateX(0)';});
+      }
+    });
+  }
+  root.querySelectorAll('.rec-wrap').forEach(function(wrap){
+    const card=wrap.querySelector('.rec');
+    let sx=0,sy=0,drag=false,moved=false;
+    wrap.addEventListener('touchstart',function(e){var t=e.touches[0];sx=t.clientX;sy=t.clientY;drag=true;moved=false;card.style.transition='none';},{passive:true});
+    wrap.addEventListener('touchmove',function(e){
+      if(!drag)return;var t=e.touches[0];var dx=t.clientX-sx,dy=t.clientY-sy;
+      if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>6){moved=true;var x=Math.max(-88,Math.min(0,dx));card.style.transform='translateX('+x+'px)';}
+    },{passive:true});
+    wrap.addEventListener('touchend',function(e){
+      if(!drag)return;drag=false;var t=e.changedTouches[0];var dx=t.clientX-sx;
+      card.style.transition='transform .2s';
+      if(dx<-44){closeOtherSwipe(root,wrap);wrap.classList.add('open');card.style.transform='translateX(-88px)';}
+      else{wrap.classList.remove('open');card.style.transform='translateX(0)';}
+    });
+    wrap.addEventListener('click',function(e){
+      if(e.target.closest('.rec-del'))return;
+      if(moved){
+        moved=false;
+        if(wrap.classList.contains('open'))return;
+        wrap.classList.remove('open');card.style.transition='transform .2s';card.style.transform='translateX(0)';return;
+      }
+      if(wrap.classList.contains('open')){wrap.classList.remove('open');card.style.transition='transform .2s';card.style.transform='translateX(0)';return;}
+      closeOtherSwipe(root,wrap);
+      editFromHome(wrap.getAttribute('data-id'));
+    });
+  });
+}
+function closeOtherSwipe(root,except){root.querySelectorAll('.rec-wrap.open').forEach(function(w){if(w!==except){w.classList.remove('open');var c=w.querySelector('.rec');c.style.transition='transform .2s';c.style.transform='translateX(0)';}});}
 
 /* ---------- 记一笔 ---------- */
 function openAdd(rec){
@@ -651,10 +697,10 @@ function renderBills(){
   Object.keys(groups).sort().reverse().forEach(d=>{
     const list=groups[d];let de=0,di=0;list.forEach(r=>r.type==='income'?di+=r.amount:de+=r.amount);
     html+=`<div class="day-group"><div class="day-head"><span>${d} ${'日一二三四五六'[new Date(d).getDay()]}</span><span>支 ¥${fmtShort(de)} · 收 ¥${fmtShort(di)}</span></div>`;
-    html+=list.map(r=>recRowHTML(r,`delRecord('${r.id}')`,false)).join('');
+    html+=list.map(r=>recRowHTML(r,false)).join('');
     html+='</div>';
   });
-  box.innerHTML=html;
+  box.innerHTML=html;bindSwipeRows(box);
 }
 function setFilter(f){billFilter=f;renderBills();}
 
