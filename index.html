@@ -447,12 +447,9 @@ async function initSync(){
     SYNC.ok=await pingServer();
     if(SYNC.ok){
       try{
-        const serverData=await pullFromServer();
-        const localData=collectState();
-        const merged=mergeStates(localData,serverData);
-        applyState(merged);
-        const base=serverData||{records:[],cats:[]};
-        if(JSON.stringify(merged)!==JSON.stringify(base)){await pushToServer(merged);}
+        // 仅把手机数据实时同步给电脑（自动备份），不自动从电脑拉回覆盖手机；
+        // 需要把电脑数据取回手机时，请在「我的」页手动点【从电脑恢复】
+        await pushToServer();
         SYNC.lastSync=Date.now();
       }catch(e){}
     }
